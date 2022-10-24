@@ -14,6 +14,9 @@
         cacheBust: false
     };
 
+    // owning window initialize
+    var owner_window = window; 
+
     var domtoimage = {
         toSvg: toSvg,
         toPng: toPng,
@@ -50,7 +53,14 @@
      * @param {Boolean} options.cacheBust - set to true to cache bust by appending the time to the request url
      * @return {Promise} - A promise that is fulfilled with a SVG image data URL
      * */
+
+    function UpdateWindowForNode(node)
+    {
+        owner_window = node.ownerDocument.defaultView;
+    }
+
     function toSvg(node, options) {
+        UpdateWindowForNode(node);
         options = options || {};
         copyOptions(options);
         return Promise.resolve(node)
@@ -88,6 +98,7 @@
      * @return {Promise} - A promise that is fulfilled with a Uint8Array containing RGBA pixel data.
      * */
     function toPixelData(node, options) {
+        UpdateWindowForNode(node);
         return draw(node, options || {})
             .then(function (canvas) {
                 return canvas.getContext('2d').getImageData(
@@ -105,6 +116,7 @@
      * @return {Promise} - A promise that is fulfilled with a PNG image data URL
      * */
     function toPng(node, options) {
+        UpdateWindowForNode(node);
         return draw(node, options || {})
             .then(function (canvas) {
                 return canvas.toDataURL();
@@ -117,6 +129,7 @@
      * @return {Promise} - A promise that is fulfilled with a JPEG image data URL
      * */
     function toJpeg(node, options) {
+        UpdateWindowForNode(node);
         options = options || {};
         return draw(node, options)
             .then(function (canvas) {
@@ -130,6 +143,7 @@
      * @return {Promise} - A promise that is fulfilled with a PNG image blob
      * */
     function toBlob(node, options) {
+        UpdateWindowForNode(node);
         return draw(node, options || {})
             .then(util.canvasToBlob);
     }
@@ -187,7 +201,7 @@
             });
 
         function makeNodeCopy(node) {
-            if (node instanceof HTMLCanvasElement) return util.makeImage(node.toDataURL());
+            if (node instanceof owner_window.HTMLCanvasElement || node instanceof HTMLCanvasElement) return util.makeImage(node.toDataURL());
             return node.cloneNode(false);
         }
 
@@ -216,7 +230,7 @@
         }
 
         function processClone(original, clone) {
-            if (!(clone instanceof Element)) return clone;
+            if (!(clone instanceof owner_window.Element) && !(clone instanceof Element)) return clone;
 
             return Promise.resolve()
                 .then(cloneStyle)
@@ -290,15 +304,15 @@
             }
 
             function copyUserInput() {
-                if (original instanceof HTMLTextAreaElement) clone.innerHTML = original.value;
-                if (original instanceof HTMLInputElement) clone.setAttribute("value", original.value);
+                if ((original instanceof owner_window.HTMLTextAreaElement) || (original instanceof HTMLTextAreaElement)) clone.innerHTML = original.value;
+                if ((original instanceof owner_window.HTMLInputElement) || (original instanceof HTMLInputElement)) clone.setAttribute("value", original.value);
             }
 
             function fixSvg() {
-                if (!(clone instanceof SVGElement)) return;
+                if (!(clone instanceof owner_window.SVGElement) && !(clone instanceof SVGElement)) return;
                 clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
-                if (!(clone instanceof SVGRectElement)) return;
+                if (!(clone instanceof owner_window.SVGRectElement) && !(clone instanceof SVGRectElement)) return;
                 ['width', 'height'].forEach(function (attribute) {
                     var value = clone.getAttribute(attribute);
                     if (!value) return;
@@ -332,7 +346,6 @@
                 node.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
                 return new XMLSerializer().serializeToString(node);
             })
-            .then(util.escapeXhtml)
             .then(function (xhtml) {
                 return '<foreignObject x="0" y="0" width="100%" height="100%">' + xhtml + '</foreignObject>';
             })
@@ -341,7 +354,7 @@
                     foreignObject + '</svg>';
             })
             .then(function (svg) {
-                return 'data:image/svg+xml;charset=utf-8,' + svg;
+                return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
             });
     }
 
@@ -367,7 +380,7 @@
         function mimes() {
             /*
              * Only WOFF and EOT mime types for fonts are 'real'
-             * see http://www.iana.org/assignments/media-types/media-types.xhtml
+             * see https://www.iana.org/assignments/media-types/media-types.xhtml
              */
             var WOFF = 'application/font-woff';
             var JPEG = 'image/jpeg';
@@ -443,7 +456,7 @@
                 return 'u' + fourRandomChars() + index++;
 
                 function fourRandomChars() {
-                    /* see http://stackoverflow.com/a/6248722/2519373 */
+                    /* see https://stackoverflow.com/a/6248722/2519373 */
                     return ('0000' + (Math.random() * Math.pow(36, 4) << 0).toString(36)).slice(-4);
                 }
             };
@@ -465,7 +478,7 @@
             if(domtoimage.impl.options.cacheBust) {
                 // Cache bypass so we dont have CORS issues with cached images
                 // Source: https://developer.mozilla.org/en/docs/Web/API/XMLHttpRequest/Using_XMLHttpRequest#Bypassing_the_cache
-                url += ((/\?/).test(url) ? "&" : "?") + (new Date()).getTime();
+                url += ((/\?/).test(url) ? '&' : '?') + (new Date()).getTime();
             }
 
             return new Promise(function (resolve) {
@@ -733,11 +746,11 @@
         }
 
         function inlineAll(node) {
-            if (!(node instanceof Element)) return Promise.resolve(node);
+            if (!(node instanceof owner_window.Element) && !(node instanceof Element)) return Promise.resolve(node);
 
             return inlineBackground(node)
                 .then(function () {
-                    if (node instanceof HTMLImageElement)
+                    if ((node instanceof owner_window.HTMLImageElement) || (node instanceof HTMLImageElement))
                         return newImage(node).inline();
                     else
                         return Promise.all(
